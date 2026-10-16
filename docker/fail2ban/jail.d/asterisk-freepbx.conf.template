@@ -1,0 +1,12 @@
+# Managed by docker/fail2ban/install.sh — do not edit on the host directly.
+[asterisk-freepbx]
+enabled = true
+filter = asterisk
+port = 5060,5061
+action = %(banaction)s[name=%(__name__)s-tcp, port="5060,5061", protocol=tcp]
+         %(banaction)s[name=%(__name__)s-udp, port="5060,5061", protocol=udp]
+logpath = __ASTERISK_LOG_PATH__
+maxretry = 5
+findtime = 600
+bantime = 86400
+ignoreip = __FAIL2BAN_IGNORE_IP__

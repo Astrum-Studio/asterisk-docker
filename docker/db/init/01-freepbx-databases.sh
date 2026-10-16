@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mariadb -uroot -p"${MYSQL_ROOT_PASSWORD}" <<SQL
+CREATE DATABASE IF NOT EXISTS \`${FREEPBX_CDR_DB_NAME:-asteriskcdrdb}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'%' IDENTIFIED BY '${MYSQL_PASSWORD}';
+CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'localhost' IDENTIFIED BY '${MYSQL_PASSWORD}';
+
+GRANT ALL PRIVILEGES ON \`${FREEPBX_DB_NAME:-asterisk}\`.* TO '${MYSQL_USER}'@'%';
+GRANT ALL PRIVILEGES ON \`${FREEPBX_CDR_DB_NAME:-asteriskcdrdb}\`.* TO '${MYSQL_USER}'@'%';
+GRANT ALL PRIVILEGES ON \`${FREEPBX_DB_NAME:-asterisk}\`.* TO '${MYSQL_USER}'@'localhost';
+GRANT ALL PRIVILEGES ON \`${FREEPBX_CDR_DB_NAME:-asteriskcdrdb}\`.* TO '${MYSQL_USER}'@'localhost';
+
+FLUSH PRIVILEGES;
+SQL

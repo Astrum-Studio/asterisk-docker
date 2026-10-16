@@ -1,0 +1,34 @@
+# Local secrets
+.env
+
+# Runtime data (created by install.sh and first container start)
+data/
+www/
+mysql/
+asterisk/
+recordings/
+voicemail/
+certs/
+logs/
+sounds/custom/*
+!sounds/custom/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Backups
+*.tar
+*.tar.gz
+*.sql
+*.sql.gz
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/

@@ -1,0 +1,31 @@
+server {
+    listen ${HTTP_PORT};
+    server_name _;
+
+    root /var/www/html;
+    index index.php index.html;
+
+    access_log /var/log/nginx/freepbx_access.log;
+    error_log /var/log/nginx/freepbx_error.log;
+
+    client_max_body_size 64M;
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param HTTP_HOST $http_host;
+        fastcgi_param SERVER_NAME $host;
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+    }
+
+    location ~* \.(jpg|jpeg|gif|css|png|js|ico|html|svg|woff|woff2)$ {
+        expires max;
+        log_not_found off;
+    }
+}

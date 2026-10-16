@@ -1,0 +1,112 @@
+name: Publish image to GHCR
+
+# Builds FreePBX + Asterisk 21 image and pushes to:
+#   ghcr.io/astrum-studio/asterisk-docker
+#
+# Triggers:
+#   - push to main → :latest + :sha-…
+#   - git tag v1.2.3 / GitHub Release → :1.2.3, :1.2, :latest
+#   - workflow_dispatch → manual (+ optional extra tag)
+#
+# Auth: GITHUB_TOKEN (packages: write). Org: Actions → Read and write permissions.
+# Package visibility: make Public (or docker login on customer servers).
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional extra image tag (e.g. staging)"
+        required: false
+        default: ""
+
+concurrency:
+  group: publish-image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: astrum-studio/asterisk-docker
+
+jobs:
+  build-push:
+    name: Build & push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image owner (lowercase)
+        id: repo
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.owner }}/asterisk-docker
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            type=ref,event=tag
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ASTERISK_VERSION=21
+            FREEPBX_TARBALL_URL=http://mirror.freepbx.org/modules/packages/freepbx/freepbx-17.0-latest-EDGE.tgz
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Summary
+        run: |
+          {
+            echo "## Published · Astrum FreePBX Docker"
+            echo ""
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo ""
+            echo "### Install on customer PBX host"
+            echo '```bash'
+            echo "git clone https://github.com/${{ github.repository }}.git"
+            echo "cd ${{ github.repository }}"
+            echo "./install.sh --yes"
+            echo "# or pin a release:"
+            echo "export FREEPBX_IMAGE_TAG=1.2.3"
+            echo "./install.sh --yes --skip-build"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

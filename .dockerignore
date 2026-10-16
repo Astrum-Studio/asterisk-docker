@@ -1,0 +1,14 @@
+.git
+.env
+data
+mysql
+asterisk
+sounds
+recordings
+voicemail
+certs
+logs
+*.tar
+*.tar.gz
+*.sql
+*.sql.gz

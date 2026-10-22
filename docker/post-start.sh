@@ -73,9 +73,6 @@ fwconsole reload || true
 log "Applying FreePBX runtime sync (astdb, inbound routes, PHP patches)..."
 /usr/local/bin/freepbx-sync-runtime || true
 
-log "Generating Astrum dialplan snippets..."
-/usr/local/bin/freepbx-ensure-astrum-dialplan || true
-
 log "Ensuring call recording on inbound/outbound routes..."
 /usr/local/bin/freepbx-ensure-call-recording || true
 /usr/sbin/fwconsole reload >/dev/null 2>&1 || true

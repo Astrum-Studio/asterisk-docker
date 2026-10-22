@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers + Astrum TUI for FreePBX + Asterisk Docker installer.
-# Style aligned with https://github.com/Astrum-Studio/bitrix24-converter-go
+# Shared helpers and TUI for the FreePBX + Asterisk Docker installer.
 
 set -euo pipefail
 
@@ -10,7 +9,7 @@ if [[ -z "${REPO_ROOT:-}" ]]; then
 fi
 
 PRODUCT_NAME="FreePBX + Asterisk"
-PRODUCT_SLUG="bitrix24-asterisk-docker"
+PRODUCT_SLUG="asterisk-docker"
 GHCR_IMAGE="ghcr.io/astrum-studio/asterisk-docker"
 DEFAULT_PORT="8080"
 
@@ -249,6 +248,230 @@ env_set() {
 env_get() {
   local file="$1" key="$2"
   grep -E "^${key}=" "${file}" 2>/dev/null | head -1 | cut -d= -f2-
+}
+
+# Planned value: CLI override > existing .env > default.
+env_planned() {
+  local key="$1" cli_value="$2" cli_set="$3" default="$4" env_file="${5:-}"
+  if [[ "${cli_set}" -eq 1 && -n "${cli_value}" ]]; then
+    printf '%s' "${cli_value}"
+    return
+  fi
+  if [[ -n "${env_file}" && -f "${env_file}" ]]; then
+    local from_env
+    from_env="$(env_get "${env_file}" "${key}" || true)"
+    if [[ -n "${from_env}" ]]; then
+      printf '%s' "${from_env}"
+      return
+    fi
+  fi
+  printf '%s' "${default}"
+}
+
+detect_arch() {
+  local arch
+  arch="$(uname -m)"
+  case "${arch}" in
+    x86_64|amd64) echo x86_64 ;;
+    aarch64|arm64) echo aarch64 ;;
+    *) echo "${arch}" ;;
+  esac
+}
+
+arch_supported() {
+  case "$(detect_arch)" in
+    x86_64|aarch64) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+arch_ghcr_compatible() {
+  [[ "$(detect_arch)" == "x86_64" ]]
+}
+
+print_kv() {
+  local pad=$((22 - ${#1}))
+  ((pad < 1)) && pad=1
+  printf "  ${C_DIM}%s%*s${C_RESET} %b" "$1" "${pad}" "" "$2"
+  [[ -n "${3:-}" ]] && printf "  ${C_DIM}%b${C_RESET}" "$3"
+  printf '\n'
+}
+
+print_plan_header() {
+  printf "\n  ${C_BOLD}План установки${C_RESET}\n"
+  printf "  ${C_DIM}────────────────────────────────────────────${C_RESET}\n"
+}
+
+free_disk_gb() {
+  local path="${1:-.}"
+  local kb
+  kb="$(df -Pk "${path}" 2>/dev/null | awk 'NR==2 {print $4}' || true)"
+  [[ -z "${kb}" ]] && echo 0 && return
+  echo $((kb / 1024 / 1024))
+}
+
+port_in_use_tcp() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn "( sport = :${port} )" 2>/dev/null | grep -q ":${port}" && return 0
+    return 1
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
+port_in_use_udp() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -lun "( sport = :${port} )" 2>/dev/null | grep -q ":${port}" && return 0
+    return 1
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -iUDP:"${port}" >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
+rtp_range_listener_count() {
+  local start="$1" finish="$2"
+  local count=0
+  if command -v ss >/dev/null 2>&1; then
+    count="$(ss -lun 2>/dev/null | awk -v s="${start}" -v f="${finish}" '
+      $5 ~ /:[0-9]+$/ {
+        split($5, a, ":");
+        p = a[length(a)];
+        if (p >= s && p <= f) c++
+      }
+      END { print c+0 }
+    ')"
+    printf '%s' "${count:-0}"
+    return
+  fi
+  printf '0'
+}
+
+freepbx_stack_running() {
+  if ! docker_usable; then
+    return 1
+  fi
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'freepbx' \
+    || docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'freepbx-db'
+}
+
+# Preflight before Docker install and .env writes. Exits on hard failures.
+run_install_preflight() {
+  local repo_root="$1"
+  local env_file="$2"
+  local use_dev="$3"
+  local http_port="$4"
+  local db_port="$5"
+  local ami_enabled="$6"
+  local ami_port="$7"
+  local rtp_start="$8"
+  local rtp_finish="$9"
+  local image_tag="${10}"
+
+  local family disk_gb upgrade=0
+  family="$(detect_os_family)"
+
+  if [[ "${family}" == "unknown" ]]; then
+    die "ОС не поддерживается автоустановкой Docker. Установите Docker вручную: https://docs.docker.com/engine/install/"
+  fi
+  log_ok "$(os_pretty_name) · $(detect_arch)"
+
+  if ! arch_supported; then
+    die "Архитектура $(uname -m) не поддерживается (нужны x86_64 или aarch64)."
+  fi
+
+  if [[ "${use_dev}" -eq 0 ]] && ! arch_ghcr_compatible; then
+    die "Образ GHCR собран только для linux/amd64. На этой машине используйте ./install.sh --dev (локальная сборка)."
+  fi
+  if [[ "${use_dev}" -eq 1 ]] && ! arch_ghcr_compatible; then
+    log_warn "GHCR-образ только amd64 — для этой архитектуры будет локальная сборка (--dev)"
+  fi
+
+  disk_gb="$(free_disk_gb "${repo_root}")"
+  if [[ "${disk_gb}" -lt 8 ]]; then
+    die "Мало свободного места: ${disk_gb} ГБ (нужно минимум 8 ГБ в ${repo_root})."
+  fi
+  if [[ "${use_dev}" -eq 1 && "${disk_gb}" -lt 15 ]]; then
+    log_warn "Для локальной сборки рекомендуется ≥15 ГБ свободно (сейчас ~${disk_gb} ГБ)"
+  else
+    log_ok "Диск · ~${disk_gb} ГБ свободно"
+  fi
+
+  if freepbx_stack_running; then
+    upgrade=1
+    log_ok "Обнаружен запущенный стек freepbx (обновление / повторный запуск)"
+  fi
+
+  local proto p
+  for p in 5060 5061; do
+    if [[ "${upgrade}" -eq 0 ]]; then
+      for proto in tcp udp; do
+        if [[ "${proto}" == "tcp" ]] && port_in_use_tcp "${p}"; then
+          die "Порт SIP ${p}/tcp занят. Остановите другой SIP-сервер или освободите порт."
+        fi
+        if [[ "${proto}" == "udp" ]] && port_in_use_udp "${p}"; then
+          die "Порт SIP ${p}/udp занят. Остановите другой SIP-сервер или освободите порт."
+        fi
+      done
+    fi
+  done
+
+  if [[ "${ami_enabled}" != "0" && "${upgrade}" -eq 0 ]] && port_in_use_tcp "${ami_port}"; then
+    die "Порт AMI ${ami_port}/tcp занят. Измените ASTERISK_AMI_PORT в .env или освободите порт."
+  fi
+
+  if [[ "${upgrade}" -eq 0 ]] && port_in_use_tcp "${http_port}"; then
+    if [[ "${ASSUME_YES:-0}" -eq 1 ]]; then
+      die "Порт HTTP ${http_port}/tcp занят. Укажите другой: ./install.sh --port N"
+    fi
+    log_warn "Порт HTTP ${http_port}/tcp уже слушается"
+    ask_yes "Продолжить с портом ${http_port}?" || die "Отменено. Укажите свободный порт: --port N"
+  fi
+
+  if [[ "${upgrade}" -eq 0 ]] && port_in_use_tcp "${db_port}"; then
+    if [[ "${ASSUME_YES:-0}" -eq 1 ]]; then
+      die "Порт MariaDB ${db_port}/tcp занят. Измените FREEPBX_DB_PORT в .env."
+    fi
+    log_warn "Порт MariaDB ${db_port}/tcp уже слушается"
+    ask_yes "Продолжить с портом ${db_port}?" || die "Отменено. Измените FREEPBX_DB_PORT в .env."
+  fi
+
+  local rtp_listeners
+  rtp_listeners="$(rtp_range_listener_count "${rtp_start}" "${rtp_finish}")"
+  if [[ "${rtp_listeners}" -gt 0 ]]; then
+    log_warn "В диапазоне RTP ${rtp_start}-${rtp_finish} уже есть ~${rtp_listeners} UDP-слушателей"
+  fi
+
+  local mode_label
+  if [[ "${use_dev}" -eq 1 ]]; then
+    mode_label="разработка (локальная сборка)"
+  else
+    mode_label="production (GHCR ${image_tag})"
+  fi
+
+  print_plan_header
+  print_kv "Каталог" "${repo_root}"
+  print_kv "Режим" "${mode_label}"
+  print_kv "HTTP" "${http_port}/tcp"
+  print_kv "MariaDB" "${db_port}/tcp (bind из .env)"
+  print_kv "SIP" "5060–5061 tcp+udp"
+  if [[ "${ami_enabled}" != "0" ]]; then
+    print_kv "AMI" "${ami_port}/tcp"
+  else
+    print_kv "AMI" "отключён"
+  fi
+  print_kv "RTP" "${rtp_start}-${rtp_finish}/udp"
+  printf '\n'
+
+  ask_yes "Продолжить установку?" || {
+    log_warn "Отменено — система не изменена"
+    exit 0
+  }
 }
 
 print_banner() {

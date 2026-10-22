@@ -27,8 +27,6 @@ x-freepbx-image: &freepbx-image
     FREEPBX_DB_PORT: "${FREEPBX_DB_PORT:-3307}"
     RTP_START: "${RTP_START:-10000}"
     RTP_FINISH: "${RTP_FINISH:-20000}"
-    ASTRUM_PORTAL_API_KEY: "${ASTRUM_PORTAL_API_KEY:-}"
-    ASTRUM_PORTAL_FORWARD_URL: "${ASTRUM_PORTAL_FORWARD_URL:-}"
   volumes:
     - ./data:/data
     - ./www:/var/www/html

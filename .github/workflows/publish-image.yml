@@ -9,7 +9,7 @@ name: Publish image to GHCR
 #   - workflow_dispatch → manual (+ optional extra tag)
 #
 # Auth: GITHUB_TOKEN (packages: write). Org: Actions → Read and write permissions.
-# Package visibility: make Public (or docker login on customer servers).
+# Package visibility: make the GHCR package public, or log in before pull.
 
 on:
   push:
@@ -94,16 +94,16 @@ jobs:
       - name: Summary
         run: |
           {
-            echo "## Published · Astrum FreePBX Docker"
+            echo "## Published · FreePBX Docker"
             echo ""
             echo '```'
             echo "${{ steps.meta.outputs.tags }}"
             echo '```'
             echo ""
-            echo "### Install on customer PBX host"
+            echo "### Install"
             echo '```bash'
             echo "git clone https://github.com/${{ github.repository }}.git"
-            echo "cd ${{ github.repository }}"
+            echo "cd asterisk-docker"
             echo "./install.sh --yes"
             echo "# or pin a release:"
             echo "export FREEPBX_IMAGE_TAG=1.2.3"

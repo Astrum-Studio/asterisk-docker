@@ -28,7 +28,7 @@ jobs:
       - name: Shell scripts syntax
         run: |
           set -euo pipefail
-          for script in docker/*.sh scripts/*.sh e2e/run.sh install.sh; do
+          for script in docker/*.sh docker/db/*.sh scripts/*.sh scripts/lib/*.sh install.sh; do
             bash -n "$script"
           done
 
@@ -39,26 +39,12 @@ jobs:
           test -f docker-compose.yml
           test -f docker-compose.dev.yml
           test -f .env.example
-          test -f asterisk/extensions_custom.conf
-          test -f e2e/run.sh
-          test -f e2e/MATRIX.md
+          test -f install.sh
+          test -f scripts/autoinstaller.sh
           test -f .github/workflows/publish-image.yml
 
-  e2e-smoke:
-    name: E2E smoke (offline)
-    runs-on: ubuntu-latest
-    needs: validate
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: E2E runner exits cleanly without live stack
-        env:
-          E2E_CONNECTOR_URL: ""
-          E2E_APP_URL: ""
-          FREEPBX_IMAGE_TAG: latest
+      - name: Installer help (offline)
         run: |
-          set +e
-          ./e2e/run.sh
-          code=$?
-          set -e
-          test "$code" -eq 0
+          set -euo pipefail
+          ./install.sh --help >/dev/null
+          ./scripts/autoinstaller.sh --help >/dev/null

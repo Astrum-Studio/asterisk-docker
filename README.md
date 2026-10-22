@@ -7,36 +7,6 @@ Open-source installer for **FreePBX 17** and **Asterisk 21** on Linux using Dock
 
 `network_mode: host` is used for the PBX container so SIP/RTP work reliably on a VM or bare metal without Docker NAT rewriting media addresses.
 
-## Deployment model (Bitrix24)
-
-This repository is the **customer-side PBX**. Typical production layout:
-
-| Host | Components |
-|------|------------|
-| **Vendor** (your company) | Bitrix24 Market App — one shared instance for all portals |
-| **Customer** | This FreePBX/Asterisk stack + [Asterisk Connector](https://github.com/Astrum-Studio/bitrix24-asterisk-connector) |
-
-Linking is **manual** in the Market App UI: paste the customer's Connector public HTTPS URL and API key. Do not co-locate the Market App with the customer's PBX.
-
-```text
-Bitrix24 cloud
-      │
-      ▼
-Market App (vendor server)
-      │  HTTPS + portal API key
-      ▼
-Connector (customer server) ──AMI/CEL──► FreePBX/Asterisk (this compose)
-      ▲
-      └── signed recording URLs (customer HTTPS)
-```
-
-On the customer host, also:
-
-1. Run the Connector Compose next to this stack (same host is fine).
-2. Point Connector AMI/MySQL to FreePBX (`host.docker.internal` or `127.0.0.1` as documented below).
-3. Mount `./recordings` into the Connector as `RECORDINGS_DIR` (read-only is enough for delivery).
-4. Expose Connector behind HTTPS so the vendor Market App and Bitrix24 can reach it.
-
 ## Requirements
 
 - Linux with Docker Engine, Docker Compose v2, and OpenSSL
@@ -45,13 +15,23 @@ On the customer host, also:
 
 ## Quick install
 
+**One-liner** (клонирует в `/opt/asterisk-docker`, ставит Docker при необходимости):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Astrum-Studio/asterisk-docker/main/scripts/autoinstaller.sh | sudo bash -s -- --yes
+```
+
+**Из git-клона:**
+
 ```bash
 git clone https://github.com/Astrum-Studio/asterisk-docker.git
 cd asterisk-docker
 
-chmod +x install.sh
+chmod +x install.sh scripts/autoinstaller.sh
 ./install.sh --yes
 ```
+
+Перед изменениями на хосте `install.sh` проверяет ОС, свободное место и занятость портов (HTTP, MariaDB, SIP `5060`/`5061`, AMI, RTP).
 
 `install.sh` will:
 
@@ -112,27 +92,15 @@ docker compose -f docker-compose.dev.yml up -d
 docker compose -f docker-compose.dev.yml logs -f freepbx
 ```
 
-MariaDB is published on `0.0.0.0:${FREEPBX_DB_PORT}` so the Connector (or other apps) can connect with `FREEPBX_DB_USER` / `FREEPBX_DB_PASS`. The `freepbx` container still uses `127.0.0.1` because it runs with host networking. Restrict `${FREEPBX_DB_PORT}` with a firewall in production.
-
-Smoke checks (FreePBX + optional remote Connector / Market App):
-
-```bash
-./e2e/run.sh
-E2E_CONNECTOR_URL=https://connector.customer.example E2E_APP_URL=https://app.vendor.example ./e2e/run.sh
-```
-
-See `e2e/MATRIX.md` for live Bitrix24/AMI parity scenarios.
+MariaDB is published on `${FREEPBX_DB_BIND}:${FREEPBX_DB_PORT}` (default `127.0.0.1:3307`). The `freepbx` container uses `127.0.0.1` because it runs with host networking. Restrict `${FREEPBX_DB_PORT}` with a firewall if you bind it beyond localhost.
 
 ## Asterisk AMI
 
 AMI is enabled during container startup from `.env`. Credentials and ACLs are written to `asterisk/manager_custom.conf` (included by FreePBX) and re-applied after every `fwconsole reload`.
 
-By default AMI listens on `127.0.0.1:5038` and permits loopback. When `ASTERISK_AMI_PERMIT_HOST_IPS=1`, host interface IPs are auto-added. When `ASTERISK_AMI_PERMIT_DOCKER=1` (default), all `docker0` / `br-*` bridge subnets on the host are auto-permitted — so a same-host Bitrix connector in Compose works without hardcoding Docker network IPs.
+AMI listens on `ASTERISK_AMI_BINDADDR:ASTERISK_AMI_PORT` (default `0.0.0.0:5038` in `.env.example`) and permits loopback. When `ASTERISK_AMI_PERMIT_HOST_IPS=1`, host interface IPs are added. When `ASTERISK_AMI_PERMIT_DOCKER=1` (default), `docker0` and `br-*` bridge subnets on the host are permitted, so another container on the same machine can reach AMI without a hardcoded bridge address.
 
-For a same-host Docker connector:
-
-1. Set `ASTERISK_AMI_BINDADDR=0.0.0.0` (restrict TCP `5038` with a firewall to localhost + Docker bridges).
-2. In the connector, use AMI/MySQL host `host.docker.internal` (Compose `extra_hosts: host.docker.internal:host-gateway`).
+Restrict TCP `5038` with a firewall. For a client in another Compose project on the same host, point it at `host.docker.internal` (`extra_hosts: host.docker.internal:host-gateway`).
 
 The installer generates `ASTERISK_AMI_PASSWORD` when it creates `.env`, or when the existing `.env` still contains the placeholder value.
 
@@ -155,7 +123,7 @@ If remote AMI access is required, add CIDRs via `ASTERISK_AMI_PERMIT_EXTRA`, kee
 | `docker/` | yes | entrypoint, nginx, supervisor, DB init |
 | `.env.example` | yes | Environment template |
 | `install.sh` | yes | One-command installer |
-| `e2e/` | yes | Smoke checks + parity matrix for split deployment |
+| `scripts/autoinstaller.sh` | yes | curl \| bash entrypoint (clone to `/opt/asterisk-docker`) |
 | `data/`, `www/`, `mysql/`, `asterisk/` | no | Created on first run; hold PBX state |
 | `recordings/`, `voicemail/`, `certs/`, `logs/` | no | Runtime data |
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# FreePBX + Asterisk — one-shot installer (Astrum Agency).
-# Style: https://github.com/Astrum-Studio/bitrix24-converter-go
+# FreePBX + Asterisk — one-shot installer.
 #
 #   ./install.sh
 #   ./install.sh --yes
@@ -15,7 +14,7 @@ REPO_ROOT="${SCRIPT_DIR}"
 # shellcheck source=scripts/lib/common.sh
 source "${REPO_ROOT}/scripts/lib/common.sh"
 
-TOTAL_STEPS=3
+TOTAL_STEPS=4
 ENV_FILE="${REPO_ROOT}/.env"
 
 # ---------- Параметры по умолчанию ------------------------------------------
@@ -106,9 +105,13 @@ usage() {
   ${C_BLUE}--skip-build${C_RESET}       пропустить build/pull (только запуск контейнеров)
   ${C_BLUE}-h, --help${C_RESET}          эта справка
 
-  ${C_DIM}Шаги:${C_RESET}  Docker → .env → pull/build & up
+  ${C_DIM}Шаги:${C_RESET}  проверка хоста → Docker → .env → pull/build & up
 
   ${C_DIM}Образ:${C_RESET}  ${GHCR_IMAGE}
+
+  ${C_DIM}Без клона (one-liner):${C_RESET}
+    curl -fsSL https://raw.githubusercontent.com/Astrum-Studio/asterisk-docker/main/scripts/autoinstaller.sh \\
+      | sudo bash -s -- --yes
 
   ${C_DIM}Значения HTTP_PORT и FREEPBX_IMAGE_TAG из .env сохраняются,
   если не переданы явно через --port / --tag.${C_RESET}
@@ -133,8 +136,33 @@ done
 print_banner
 print_meta
 
-# ---------- Шаг 1: Docker ---------------------------------------------------
-log_step 1 "${TOTAL_STEPS}" "Docker Engine"
+# ---------- Preflight (до Docker и записи .env) ------------------------------
+log_step 1 "${TOTAL_STEPS}" "Проверка хоста"
+
+PLANNED_HTTP="$(env_planned HTTP_PORT "${HTTP_PORT}" "${PORT_FROM_CLI}" "${DEFAULT_PORT}" "${ENV_FILE}")"
+PLANNED_DB="$(env_planned FREEPBX_DB_PORT "" 0 "3307" "${ENV_FILE}")"
+PLANNED_AMI_PORT="$(env_planned ASTERISK_AMI_PORT "" 0 "5038" "${ENV_FILE}")"
+PLANNED_AMI_ENABLED="$(env_planned ASTERISK_AMI_ENABLED "" 0 "1" "${ENV_FILE}")"
+PLANNED_RTP_START="$(env_planned RTP_START "" 0 "10000" "${ENV_FILE}")"
+PLANNED_RTP_FINISH="$(env_planned RTP_FINISH "" 0 "20000" "${ENV_FILE}")"
+PLANNED_TAG="$(env_planned FREEPBX_IMAGE_TAG "${IMAGE_TAG}" "${TAG_FROM_CLI}" "latest" "${ENV_FILE}")"
+HTTP_PORT="${PLANNED_HTTP}"
+IMAGE_TAG="${PLANNED_TAG}"
+
+run_install_preflight \
+  "${REPO_ROOT}" \
+  "${ENV_FILE}" \
+  "${USE_DEV}" \
+  "${PLANNED_HTTP}" \
+  "${PLANNED_DB}" \
+  "${PLANNED_AMI_ENABLED}" \
+  "${PLANNED_AMI_PORT}" \
+  "${PLANNED_RTP_START}" \
+  "${PLANNED_RTP_FINISH}" \
+  "${PLANNED_TAG}"
+
+# ---------- Шаг 2: Docker ---------------------------------------------------
+log_step 2 "${TOTAL_STEPS}" "Docker Engine"
 
 if [[ "${SKIP_DOCKER}" -eq 1 ]]; then
   has_docker || die "Docker не найден (--skip-docker)"
@@ -163,8 +191,8 @@ else
   fi
 fi
 
-# ---------- Шаг 2: Environment (создание .env и секретов) -------------------
-log_step 2 "${TOTAL_STEPS}" "Конфигурация"
+# ---------- Шаг 3: Environment (создание .env и секретов) -------------------
+log_step 3 "${TOTAL_STEPS}" "Конфигурация"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   if [[ ! -f "${REPO_ROOT}/.env.example" ]]; then
@@ -196,8 +224,8 @@ if [[ "${NO_START}" -eq 1 ]]; then
   exit 0
 fi
 
-# ---------- Шаг 3: Pull/Build и запуск --------------------------------------
-log_step 3 "${TOTAL_STEPS}" "Образы и запуск"
+# ---------- Шаг 4: Pull/Build и запуск --------------------------------------
+log_step 4 "${TOTAL_STEPS}" "Образы и запуск"
 
 cd "${REPO_ROOT}"
 

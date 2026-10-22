@@ -130,7 +130,6 @@ COPY docker/ensure-ami.sh /usr/local/bin/freepbx-ensure-ami
 COPY docker/ensure-odbc.sh /usr/local/bin/freepbx-ensure-odbc
 COPY docker/ensure-freepbx-layout.sh /usr/local/bin/freepbx-ensure-layout
 COPY docker/sync-freepbx-runtime.sh /usr/local/bin/freepbx-sync-runtime
-COPY docker/ensure-astrum-dialplan.sh /usr/local/bin/freepbx-ensure-astrum-dialplan
 COPY docker/ensure-call-recording.sh /usr/local/bin/freepbx-ensure-call-recording
 COPY docker/entrypoint.sh /usr/local/bin/freepbx-entrypoint
 COPY docker/post-start.sh /usr/local/bin/freepbx-post-start
@@ -140,7 +139,6 @@ RUN chmod +x \
     /usr/local/bin/freepbx-ensure-odbc \
     /usr/local/bin/freepbx-ensure-layout \
     /usr/local/bin/freepbx-sync-runtime \
-    /usr/local/bin/freepbx-ensure-astrum-dialplan \
     /usr/local/bin/freepbx-ensure-call-recording \
     /usr/local/bin/freepbx-entrypoint \
     /usr/local/bin/freepbx-post-start \

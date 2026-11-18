@@ -218,14 +218,16 @@ ensure_asterisk_ami() {
   fi
 
   # Same-host Docker workers reach host AMI from compose bridge gateways.
-  # Auto-permit docker0/br-* /24 subnets so ACL stays portable across hosts.
+  # Auto-permit all standard Docker bridge ranges (RFC 1918) so any container on the host can connect.
   if [ "${ASTERISK_AMI_PERMIT_DOCKER:-1}" = "1" ]; then
+    permit_lines+="permit = 172.16.0.0/255.240.0.0"$'\n'
+    permit_lines+="permit = 10.0.0.0/255.0.0.0"$'\n'
+    permit_lines+="permit = 192.168.0.0/255.255.0.0"$'\n'
     local iface ip
     while read -r iface ip; do
       case "${iface}" in
         docker0|br-*)
           [ -n "${ip}" ] || continue
-          # Convert x.y.z.g -> x.y.z.0/24 (compose bridges are /24 by default).
           permit_lines+="permit = ${ip%.*}.0/255.255.255.0"$'\n'
           ;;
       esac

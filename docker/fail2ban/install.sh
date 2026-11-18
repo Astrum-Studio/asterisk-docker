@@ -44,6 +44,8 @@ touch "${ASTERISK_LOG_PATH}"
 sed \
   -e "s|__ASTERISK_LOG_PATH__|${ASTERISK_LOG_PATH}|g" \
   -e "s|__FAIL2BAN_IGNORE_IP__|${IGNORE_IP}|g" \
+  -e "s|__SIP_PORT__|${SIP_PORT}|g" \
+  -e "s|__SIPS_PORT__|${SIPS_PORT}|g" \
   "${TEMPLATE}" > "${JAIL_TARGET}"
 
 sed \

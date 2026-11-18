@@ -92,7 +92,7 @@ docker compose -f docker-compose.dev.yml up -d
 docker compose -f docker-compose.dev.yml logs -f freepbx
 ```
 
-MariaDB is published on `${FREEPBX_DB_BIND}:${FREEPBX_DB_PORT}` (default `127.0.0.1:3307`). The `freepbx` container uses `127.0.0.1` because it runs with host networking. Restrict `${FREEPBX_DB_PORT}` with a firewall if you bind it beyond localhost.
+MariaDB is published on `${FREEPBX_DB_BIND}:${FREEPBX_DB_PORT}` (default `0.0.0.0:3307`, same idea as AMI). The `freepbx` container still connects via `127.0.0.1` (host networking). MySQL users are limited to localhost and private nets (`10.%` / `172.%` / `192.168.%`) so a same-host Connector can use `host.docker.internal:3307` without `FREEPBX_DB_ALLOW_REMOTE=1`. Restrict TCP `${FREEPBX_DB_PORT}` with a firewall (`install.sh` adds a `ufw deny` rule when ufw is active). Set `FREEPBX_DB_BIND=127.0.0.1` only if nothing outside the host loopback must reach CEL/CDR.
 
 ## Asterisk AMI
 

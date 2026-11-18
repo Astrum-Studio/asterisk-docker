@@ -2,9 +2,9 @@
 [asterisk-freepbx]
 enabled = true
 filter = asterisk
-port = 5060,5061
-action = %(banaction)s[name=%(__name__)s-tcp, port="5060,5061", protocol=tcp]
-         %(banaction)s[name=%(__name__)s-udp, port="5060,5061", protocol=udp]
+port = __SIP_PORT__,__SIPS_PORT__
+action = %(banaction)s[name=%(__name__)s-tcp, port="__SIP_PORT__,__SIPS_PORT__", protocol=tcp]
+         %(banaction)s[name=%(__name__)s-udp, port="__SIP_PORT__,__SIPS_PORT__", protocol=udp]
 logpath = __ASTERISK_LOG_PATH__
 maxretry = 5
 findtime = 600

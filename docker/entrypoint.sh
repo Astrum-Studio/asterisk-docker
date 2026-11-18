@@ -3,6 +3,8 @@ set -euo pipefail
 
 export TZ="${TZ:-Europe/Moscow}"
 export HTTP_PORT="${HTTP_PORT:-8080}"
+export SIP_PORT="${SIP_PORT:-5060}"
+export SIPS_PORT="${SIPS_PORT:-5061}"
 export FREEPBX_DB_HOST="${FREEPBX_DB_HOST:-127.0.0.1}"
 export FREEPBX_DB_NAME="${FREEPBX_DB_NAME:-asterisk}"
 export FREEPBX_CDR_DB_NAME="${FREEPBX_CDR_DB_NAME:-asteriskcdrdb}"

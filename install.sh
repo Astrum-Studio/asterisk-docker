@@ -143,6 +143,8 @@ PLANNED_HTTP="$(env_planned HTTP_PORT "${HTTP_PORT}" "${PORT_FROM_CLI}" "${DEFAU
 PLANNED_DB="$(env_planned FREEPBX_DB_PORT "" 0 "3307" "${ENV_FILE}")"
 PLANNED_AMI_PORT="$(env_planned ASTERISK_AMI_PORT "" 0 "5038" "${ENV_FILE}")"
 PLANNED_AMI_ENABLED="$(env_planned ASTERISK_AMI_ENABLED "" 0 "1" "${ENV_FILE}")"
+PLANNED_SIP_PORT="$(env_planned SIP_PORT "" 0 "5060" "${ENV_FILE}")"
+PLANNED_SIPS_PORT="$(env_planned SIPS_PORT "" 0 "5061" "${ENV_FILE}")"
 PLANNED_RTP_START="$(env_planned RTP_START "" 0 "10000" "${ENV_FILE}")"
 PLANNED_RTP_FINISH="$(env_planned RTP_FINISH "" 0 "20000" "${ENV_FILE}")"
 PLANNED_TAG="$(env_planned FREEPBX_IMAGE_TAG "${IMAGE_TAG}" "${TAG_FROM_CLI}" "latest" "${ENV_FILE}")"
@@ -157,6 +159,8 @@ run_install_preflight \
   "${PLANNED_DB}" \
   "${PLANNED_AMI_ENABLED}" \
   "${PLANNED_AMI_PORT}" \
+  "${PLANNED_SIP_PORT}" \
+  "${PLANNED_SIPS_PORT}" \
   "${PLANNED_RTP_START}" \
   "${PLANNED_RTP_FINISH}" \
   "${PLANNED_TAG}"
@@ -286,6 +290,8 @@ if run_spinner "Запуск..." -- ${COMPOSE_CMD} up -d; then
 else
   die "Ошибка запуска контейнеров"
 fi
+
+secure_mariadb_firewall "${PLANNED_DB}"
 
 HOST_IP="$(detect_public_host)"
 

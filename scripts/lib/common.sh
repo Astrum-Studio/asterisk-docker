@@ -369,9 +369,11 @@ run_install_preflight() {
   local db_port="$5"
   local ami_enabled="$6"
   local ami_port="$7"
-  local rtp_start="$8"
-  local rtp_finish="$9"
-  local image_tag="${10}"
+  local sip_port="$8"
+  local sips_port="$9"
+  local rtp_start="$10"
+  local rtp_finish="$11"
+  local image_tag="${12}"
 
   local family disk_gb upgrade=0
   family="$(detect_os_family)"
@@ -408,7 +410,7 @@ run_install_preflight() {
   fi
 
   local proto p
-  for p in 5060 5061; do
+  for p in "${sip_port}" "${sips_port}"; do
     if [[ "${upgrade}" -eq 0 ]]; then
       for proto in tcp udp; do
         if [[ "${proto}" == "tcp" ]] && port_in_use_tcp "${p}"; then
@@ -459,7 +461,7 @@ run_install_preflight() {
   print_kv "Режим" "${mode_label}"
   print_kv "HTTP" "${http_port}/tcp"
   print_kv "MariaDB" "${db_port}/tcp (bind из .env)"
-  print_kv "SIP" "5060–5061 tcp+udp"
+  print_kv "SIP" "${sip_port}-${sips_port}/tcp+udp"
   if [[ "${ami_enabled}" != "0" ]]; then
     print_kv "AMI" "${ami_port}/tcp"
   else
@@ -500,6 +502,29 @@ print_meta() {
   printf "  ${C_DIM}│${C_RESET}  ${C_DIM}Docker${C_RESET}   ${C_WHITE}%-32s${C_RESET}${C_DIM}│${C_RESET}\n" "${docker_v:0:32}"
   printf "  ${C_DIM}│${C_RESET}  ${C_DIM}Path${C_RESET}     ${C_WHITE}%-32s${C_RESET}${C_DIM}│${C_RESET}\n" "${REPO_ROOT:0:32}"
   printf "  ${C_DIM}└────────────────────────────────────────────┘${C_RESET}\n"
+}
+
+# Deny inbound MariaDB publish from the WAN when ufw is active (same-host Docker
+# still reaches host.docker.internal via the docker bridge path).
+secure_mariadb_firewall() {
+  local db_port="${1:-3307}"
+  if ! command -v ufw >/dev/null 2>&1; then
+    log_info "ufw не найден — ограничьте TCP ${db_port} вручную (MariaDB на 0.0.0.0)"
+    return 0
+  fi
+  if ! ufw status 2>/dev/null | grep -qiE '^Status:\s*active'; then
+    log_info "ufw не активен — ограничьте TCP ${db_port} вручную (MariaDB на 0.0.0.0)"
+    return 0
+  fi
+  if ufw status numbered 2>/dev/null | grep -qE "\b${db_port}/tcp\b.*DENY"; then
+    log_ok "ufw уже запрещает ${db_port}/tcp"
+    return 0
+  fi
+  if ufw deny "${db_port}/tcp" comment "asterisk-docker MariaDB" >/dev/null 2>&1; then
+    log_ok "ufw: deny ${db_port}/tcp (MariaDB)"
+  else
+    log_warn "Не удалось добавить ufw deny ${db_port}/tcp — проверьте firewall вручную"
+  fi
 }
 
 print_success_card() {

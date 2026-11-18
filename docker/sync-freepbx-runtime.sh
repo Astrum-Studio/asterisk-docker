@@ -38,8 +38,10 @@ sync_ports_and_network() {
   if command -v mariadb >/dev/null 2>&1; then
     mysql_exec -e "
       UPDATE freepbx_settings SET value='${ASTERISK_AMI_PORT}' WHERE keyword='ASTMANAGERPORT';
+      UPDATE freepbx_settings SET value='${ASTERISK_AMI_BINDADDR:-127.0.0.1}' WHERE keyword='ASTMANAGERHOST';
       UPDATE freepbx_settings SET value='${ASTERISK_HTTP_PORT}' WHERE keyword='HTTPBINDPORT';
       UPDATE freepbx_settings SET value='${ASTERISK_HTTPS_PORT}' WHERE keyword='HTTPTLSBINDPORT';
+      UPDATE freepbx_settings SET value='0' WHERE keyword='NODEJSENABLED';
     " 2>/dev/null || true
 
     mysql_exec -e "
@@ -56,7 +58,16 @@ sync_ports_and_network() {
     " 2>/dev/null || true
   fi
 
-  # 2. Update FreePBX BMO objects via PHP
+  # 2. Update /etc/amportal.conf and /data/amportal.conf
+  local am_file
+  for am_file in /etc/amportal.conf /data/amportal.conf; do
+    if [ -f "${am_file}" ]; then
+      sed -i -E "s/^[[:space:]]*ASTMANAGERPORT[[:space:]]*=.*/ASTMANAGERPORT=${ASTERISK_AMI_PORT}/" "${am_file}"
+      sed -i -E "s/^[[:space:]]*ASTMANAGERHOST[[:space:]]*=.*/ASTMANAGERHOST=${ASTERISK_AMI_BINDADDR:-127.0.0.1}/" "${am_file}"
+    fi
+  done
+
+  # 3. Update FreePBX BMO objects via PHP
   if [ -f /etc/freepbx.conf ]; then
     php <<'PHP'
 <?php
@@ -89,6 +100,7 @@ try {
                 'ASTMANAGERPORT' => $ami_port,
                 'HTTPBINDPORT' => $http_port,
                 'HTTPTLSBINDPORT' => $https_port,
+                'NODEJSENABLED' => '0',
             ], true, true);
         }
     }
@@ -98,8 +110,16 @@ try {
 PHP
   fi
 
-  # 3. Direct Asterisk config files
+  # 4. Direct Asterisk config files
   mkdir -p /etc/asterisk
+
+  if [ -f /etc/asterisk/manager.conf ]; then
+    sed -i -E "s/^[[:space:]]*port[[:space:]]*=.*/port = ${ASTERISK_AMI_PORT}/" /etc/asterisk/manager.conf
+    sed -i -E "s/^[[:space:]]*bindaddr[[:space:]]*=.*/bindaddr = ${ASTERISK_AMI_BINDADDR:-127.0.0.1}/" /etc/asterisk/manager.conf
+    if ! grep -q "manager_general_custom.conf" /etc/asterisk/manager.conf; then
+      sed -i '/\[general\]/a #include manager_general_custom.conf' /etc/asterisk/manager.conf
+    fi
+  fi
 
   cat > /etc/asterisk/rtp_custom.conf <<EOF_RTP
 [general](+)

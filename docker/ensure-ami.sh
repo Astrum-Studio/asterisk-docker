@@ -261,17 +261,34 @@ EOF_MANAGER_GENERAL_CUSTOM
       -u "${FREEPBX_DB_USER:-freepbx}" \
       -p"${FREEPBX_DB_PASS:-freepbx}" \
       "${FREEPBX_DB_NAME:-asterisk}" \
-      -e "UPDATE freepbx_settings SET value='${ASTERISK_AMI_PORT}' WHERE keyword='ASTMANAGERPORT';" \
+      -e "UPDATE freepbx_settings SET value='${ASTERISK_AMI_PORT}' WHERE keyword='ASTMANAGERPORT';
+          UPDATE freepbx_settings SET value='${ASTERISK_AMI_BINDADDR}' WHERE keyword='ASTMANAGERHOST';" \
       2>/dev/null || true
   fi
 
-  # FreePBX owns manager.conf after install; only seed it on first boot.
-  if [ ! -f /data/.freepbx-installed ]; then
-    touch \
-      /etc/asterisk/manager_general_additional.conf \
-      /etc/asterisk/manager_general_custom.conf \
-      /etc/asterisk/manager_additional.conf
+  # Update /etc/amportal.conf and /data/amportal.conf
+  local am_file
+  for am_file in /etc/amportal.conf /data/amportal.conf; do
+    if [ -f "${am_file}" ]; then
+      sed -i -E "s/^[[:space:]]*ASTMANAGERPORT[[:space:]]*=.*/ASTMANAGERPORT=${ASTERISK_AMI_PORT}/" "${am_file}"
+      sed -i -E "s/^[[:space:]]*ASTMANAGERHOST[[:space:]]*=.*/ASTMANAGERHOST=${ASTERISK_AMI_BINDADDR}/" "${am_file}"
+    fi
+  done
 
+  # Always ensure /etc/asterisk/manager.conf has correct port and bindaddr,
+  # even after FreePBX installer overwrites it with 5038 on initial setup.
+  touch \
+    /etc/asterisk/manager_general_additional.conf \
+    /etc/asterisk/manager_general_custom.conf \
+    /etc/asterisk/manager_additional.conf
+
+  if [ -f /etc/asterisk/manager.conf ]; then
+    sed -i -E "s/^[[:space:]]*port[[:space:]]*=.*/port = ${ASTERISK_AMI_PORT}/" /etc/asterisk/manager.conf
+    sed -i -E "s/^[[:space:]]*bindaddr[[:space:]]*=.*/bindaddr = ${ASTERISK_AMI_BINDADDR}/" /etc/asterisk/manager.conf
+    if ! grep -q "manager_general_custom.conf" /etc/asterisk/manager.conf; then
+      sed -i '/\[general\]/a #include manager_general_custom.conf' /etc/asterisk/manager.conf
+    fi
+  else
     cat > /etc/asterisk/manager.conf <<EOF_MANAGER
 [general]
 enabled = yes
@@ -284,9 +301,10 @@ displayconnects = yes
 #include manager_additional.conf
 #include manager_custom.conf
 EOF_MANAGER
-
-    chmod 640 /etc/asterisk/manager.conf
   fi
+
+  chmod 640 /etc/asterisk/manager.conf
+  chown asterisk:asterisk /etc/asterisk/manager.conf 2>/dev/null || true
 }
 
 reload_asterisk_ami() {

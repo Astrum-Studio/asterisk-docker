@@ -414,6 +414,27 @@ run_install_preflight() {
     log_ok "Обнаружен запущенный стек ${project_name} (обновление / повторный запуск)"
   fi
 
+  # Проверка на дублирование портов внутри параметров одного инстанса
+  local -A planned_port_map=()
+  local port_def p_val p_name
+  for port_def in \
+    "HTTP_PORT:${http_port}" \
+    "FREEPBX_DB_PORT:${db_port}" \
+    "ASTERISK_AMI_PORT:${ami_port}" \
+    "SIP_PORT:${sip_port}" \
+    "SIPS_PORT:${sips_port}" \
+    "SIP_LEGACY_PORT:${sip_legacy_port}" \
+    "ASTERISK_HTTP_PORT:${ast_http_port}" \
+    "ASTERISK_HTTPS_PORT:${ast_https_port}"; do
+    p_name="${port_def%%:*}"
+    p_val="${port_def#*:}"
+    [[ -n "${p_val}" ]] || continue
+    if [[ -n "${planned_port_map[${p_val}]:-}" ]]; then
+      die "Конфликт портов в параметрах запуска: ${p_name} и ${planned_port_map[${p_val}]} используют один и тот же порт ${p_val}. Все порты должны различаться!"
+    fi
+    planned_port_map["${p_val}"]="${p_name}"
+  done
+
   local proto p
   for p in "${sip_port}" "${sips_port}" "${sip_legacy_port}"; do
     if [[ "${upgrade}" -eq 0 && -n "${p}" ]]; then

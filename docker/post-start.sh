@@ -61,6 +61,9 @@ fi
 log "Ensuring FreePBX runtime layout..."
 /usr/local/bin/freepbx-ensure-layout
 
+log "Synchronizing network ports (SIP, RTP, AMI, HTTP, IAX)..."
+/usr/local/bin/freepbx-sync-runtime ports || true
+
 log "Ensuring AMI credentials before FreePBX reload..."
 ensure_asterisk_ami
 sync_freepbx_manager_user
@@ -74,9 +77,6 @@ if ensure_odbc_config; then
 else
   log "ODBC DSN setup skipped (driver missing)"
 fi
-
-log "Synchronizing network ports (SIP, RTP, AMI, HTTP, IAX)..."
-/usr/local/bin/freepbx-sync-runtime ports || true
 
 log "Reloading FreePBX after Asterisk is ready..."
 /usr/local/bin/freepbx-sync-runtime restore-core || true

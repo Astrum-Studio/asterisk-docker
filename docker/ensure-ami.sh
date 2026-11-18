@@ -318,3 +318,9 @@ reload_asterisk_ami() {
     /usr/sbin/asterisk -rx "manager reload" >/dev/null 2>&1 || true
   fi
 }
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  ensure_asterisk_ami
+  sync_freepbx_manager_user
+  reload_asterisk_ami
+fi

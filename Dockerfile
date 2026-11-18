@@ -83,6 +83,7 @@ RUN set -eux; \
     ./configure --libdir=/usr/lib/asterisk --with-pjproject-bundled --with-jansson-bundled; \
     make menuselect.makeopts; \
     menuselect/menuselect --enable format_mp3 menuselect.makeopts; \
+    menuselect/menuselect --disable BUILD_NATIVE menuselect.makeopts; \
     make -j"$(nproc)"; \
     make install; \
     make samples; \

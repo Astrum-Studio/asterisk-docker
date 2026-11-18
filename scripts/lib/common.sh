@@ -353,11 +353,12 @@ rtp_range_listener_count() {
 }
 
 freepbx_stack_running() {
+  local project="${1:-freepbx}"
   if ! docker_usable; then
     return 1
   fi
-  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'freepbx' \
-    || docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'freepbx-db'
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "${project}" \
+    || docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "${project}-db"
 }
 
 # Preflight before Docker install and .env writes. Exits on hard failures.
@@ -365,15 +366,19 @@ run_install_preflight() {
   local repo_root="$1"
   local env_file="$2"
   local use_dev="$3"
-  local http_port="$4"
-  local db_port="$5"
-  local ami_enabled="$6"
-  local ami_port="$7"
-  local sip_port="$8"
-  local sips_port="$9"
-  local rtp_start="$10"
-  local rtp_finish="$11"
-  local image_tag="${12}"
+  local project_name="$4"
+  local http_port="$5"
+  local db_port="$6"
+  local ami_enabled="$7"
+  local ami_port="$8"
+  local sip_port="$9"
+  local sips_port="${10}"
+  local sip_legacy_port="${11}"
+  local rtp_start="${12}"
+  local rtp_finish="${13}"
+  local ast_http_port="${14}"
+  local ast_https_port="${15}"
+  local image_tag="${16}"
 
   local family disk_gb upgrade=0
   family="$(detect_os_family)"
@@ -404,43 +409,55 @@ run_install_preflight() {
     log_ok "Диск · ~${disk_gb} ГБ свободно"
   fi
 
-  if freepbx_stack_running; then
+  if freepbx_stack_running "${project_name}"; then
     upgrade=1
-    log_ok "Обнаружен запущенный стек freepbx (обновление / повторный запуск)"
+    log_ok "Обнаружен запущенный стек ${project_name} (обновление / повторный запуск)"
   fi
 
   local proto p
-  for p in "${sip_port}" "${sips_port}"; do
-    if [[ "${upgrade}" -eq 0 ]]; then
+  for p in "${sip_port}" "${sips_port}" "${sip_legacy_port}"; do
+    if [[ "${upgrade}" -eq 0 && -n "${p}" ]]; then
       for proto in tcp udp; do
         if [[ "${proto}" == "tcp" ]] && port_in_use_tcp "${p}"; then
-          die "Порт SIP ${p}/tcp занят. Остановите другой SIP-сервер или освободите порт."
+          die "Порт SIP ${p}/tcp занят. Остановите другой SIP-сервер или укажите другой порт (--sip-port / --sips-port)."
         fi
         if [[ "${proto}" == "udp" ]] && port_in_use_udp "${p}"; then
-          die "Порт SIP ${p}/udp занят. Остановите другой SIP-сервер или освободите порт."
+          die "Порт SIP ${p}/udp занят. Остановите другой SIP-сервер или укажите другой порт (--sip-port)."
         fi
       done
     fi
   done
 
   if [[ "${ami_enabled}" != "0" && "${upgrade}" -eq 0 ]] && port_in_use_tcp "${ami_port}"; then
-    die "Порт AMI ${ami_port}/tcp занят. Измените ASTERISK_AMI_PORT в .env или освободите порт."
+    die "Порт AMI ${ami_port}/tcp занят. Измените ASTERISK_AMI_PORT в .env или укажите --ami-port."
+  fi
+
+  if [[ "${upgrade}" -eq 0 ]] && port_in_use_tcp "${ast_http_port}"; then
+    die "Порт Asterisk HTTP ${ast_http_port}/tcp занят. Измените ASTERISK_HTTP_PORT в .env или укажите --ast-http-port."
+  fi
+
+  if [[ "${upgrade}" -eq 0 ]] && port_in_use_tcp "${ast_https_port}"; then
+    die "Порт Asterisk HTTPS ${ast_https_port}/tcp занят. Измените ASTERISK_HTTPS_PORT в .env или укажите --ast-https-port."
   fi
 
   if [[ "${upgrade}" -eq 0 ]] && port_in_use_tcp "${http_port}"; then
     if [[ "${ASSUME_YES:-0}" -eq 1 ]]; then
-      die "Порт HTTP ${http_port}/tcp занят. Укажите другой: ./install.sh --port N"
+      die "Порт Web UI ${http_port}/tcp занят. Укажите другой: ./install.sh --port N"
     fi
-    log_warn "Порт HTTP ${http_port}/tcp уже слушается"
+    log_warn "Порт Web UI ${http_port}/tcp уже слушается"
     ask_yes "Продолжить с портом ${http_port}?" || die "Отменено. Укажите свободный порт: --port N"
   fi
 
   if [[ "${upgrade}" -eq 0 ]] && port_in_use_tcp "${db_port}"; then
     if [[ "${ASSUME_YES:-0}" -eq 1 ]]; then
-      die "Порт MariaDB ${db_port}/tcp занят. Измените FREEPBX_DB_PORT в .env."
+      die "Порт MariaDB ${db_port}/tcp занят. Измените FREEPBX_DB_PORT в .env или укажите --db-port."
     fi
     log_warn "Порт MariaDB ${db_port}/tcp уже слушается"
     ask_yes "Продолжить с портом ${db_port}?" || die "Отменено. Измените FREEPBX_DB_PORT в .env."
+  fi
+
+  if [[ "${rtp_finish}" -le "${rtp_start}" ]]; then
+    die "Неверный диапазон RTP: RTP_FINISH (${rtp_finish}) должен быть больше RTP_START (${rtp_start})."
   fi
 
   local rtp_listeners
@@ -458,8 +475,9 @@ run_install_preflight() {
 
   print_plan_header
   print_kv "Каталог" "${repo_root}"
+  print_kv "Проект" "${project_name}"
   print_kv "Режим" "${mode_label}"
-  print_kv "HTTP" "${http_port}/tcp"
+  print_kv "Web UI" "${http_port}/tcp"
   print_kv "MariaDB" "${db_port}/tcp (bind из .env)"
   print_kv "SIP" "${sip_port}-${sips_port}/tcp+udp"
   if [[ "${ami_enabled}" != "0" ]]; then
@@ -467,6 +485,7 @@ run_install_preflight() {
   else
     print_kv "AMI" "отключён"
   fi
+  print_kv "Asterisk HTTP" "${ast_http_port}/tcp (TLS: ${ast_https_port})"
   print_kv "RTP" "${rtp_start}-${rtp_finish}/udp"
   printf '\n'
 

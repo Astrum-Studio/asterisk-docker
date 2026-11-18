@@ -5,6 +5,7 @@ export TZ="${TZ:-Europe/Moscow}"
 export HTTP_PORT="${HTTP_PORT:-8080}"
 export SIP_PORT="${SIP_PORT:-5060}"
 export SIPS_PORT="${SIPS_PORT:-5061}"
+export SIP_LEGACY_PORT="${SIP_LEGACY_PORT:-5160}"
 export FREEPBX_DB_HOST="${FREEPBX_DB_HOST:-127.0.0.1}"
 export FREEPBX_DB_NAME="${FREEPBX_DB_NAME:-asterisk}"
 export FREEPBX_CDR_DB_NAME="${FREEPBX_CDR_DB_NAME:-asteriskcdrdb}"
@@ -19,6 +20,9 @@ export ASTERISK_AMI_PASSWORD="${ASTERISK_AMI_PASSWORD:-admin}"
 export ASTERISK_AMI_PERMIT="${ASTERISK_AMI_PERMIT:-127.0.0.0/255.0.0.0}"
 export ASTERISK_AMI_PERMIT_HOST_IPS="${ASTERISK_AMI_PERMIT_HOST_IPS:-1}"
 export ASTERISK_AMI_PERMIT_DOCKER="${ASTERISK_AMI_PERMIT_DOCKER:-1}"
+export ASTERISK_HTTP_PORT="${ASTERISK_HTTP_PORT:-8088}"
+export ASTERISK_HTTPS_PORT="${ASTERISK_HTTPS_PORT:-8089}"
+export ASTERISK_IAX_PORT="${ASTERISK_IAX_PORT:-4569}"
 
 # shellcheck source=ensure-ami.sh
 source /usr/local/bin/freepbx-ensure-ami
@@ -123,6 +127,11 @@ until mysqladmin \
   sleep 2
 done
 
+# If FreePBX is already installed, ensure database and configuration ports match .env before services start
+if [ -f /data/.freepbx-installed ] && [ -x /usr/local/bin/freepbx-sync-runtime ]; then
+  /usr/local/bin/freepbx-sync-runtime ports || true
+fi
+
 if [ -f /data/.freepbx-installed ] && { [ ! -f /etc/freepbx.conf ] || [ ! -f /var/www/html/admin/config.php ]; }; then
   echo "FreePBX marker exists, but required web/config files are missing; reinstalling web/config files."
   rm -f /data/.freepbx-installed /data/.freepbx-core-installed
@@ -174,6 +183,9 @@ if [ ! -f /data/.freepbx-installed ]; then
   touch /data/.freepbx-installed
 
   ensure_asterisk_ami
+  if [ -x /usr/local/bin/freepbx-sync-runtime ]; then
+    /usr/local/bin/freepbx-sync-runtime ports || true
+  fi
 
   /usr/sbin/asterisk -rx "core stop now" || true
   sleep 3

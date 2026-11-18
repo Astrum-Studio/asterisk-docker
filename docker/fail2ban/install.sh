@@ -5,8 +5,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="${ROOT_DIR}/.env"
 TEMPLATE="${ROOT_DIR}/docker/fail2ban/jail.d/asterisk-freepbx.conf.template"
 LOGROTATE_TEMPLATE="${ROOT_DIR}/docker/fail2ban/logrotate-asterisk.conf"
-JAIL_TARGET="/etc/fail2ban/jail.d/asterisk-freepbx.conf"
-LOGROTATE_TARGET="/etc/logrotate.d/asterisk-freepbx"
+
+PROJECT_NAME="${COMPOSE_PROJECT_NAME:-freepbx}"
+if [ -f "${ENV_FILE}" ]; then
+  PROJECT_NAME="$(grep -E '^COMPOSE_PROJECT_NAME=' "${ENV_FILE}" 2>/dev/null | head -1 | cut -d= -f2- || echo "${PROJECT_NAME}")"
+  PROJECT_NAME="${PROJECT_NAME:-freepbx}"
+fi
+
+JAIL_NAME="asterisk-${PROJECT_NAME}"
+JAIL_TARGET="/etc/fail2ban/jail.d/${JAIL_NAME}.conf"
+LOGROTATE_TARGET="/etc/logrotate.d/${JAIL_NAME}"
 
 log() {
   printf '[fail2ban-install] %s\n' "$*"
@@ -42,6 +50,7 @@ chmod 755 "$(dirname "${ASTERISK_LOG_PATH}")" 2>/dev/null || true
 touch "${ASTERISK_LOG_PATH}"
 
 sed \
+  -e "s|__JAIL_NAME__|${JAIL_NAME}|g" \
   -e "s|__ASTERISK_LOG_PATH__|${ASTERISK_LOG_PATH}|g" \
   -e "s|__FAIL2BAN_IGNORE_IP__|${IGNORE_IP}|g" \
   -e "s|__SIP_PORT__|${SIP_PORT}|g" \
@@ -77,15 +86,15 @@ log "Installed logrotate: ${LOGROTATE_TARGET}"
 log "Asterisk log: ${ASTERISK_LOG_PATH}"
 log "Ignored IPs: ${IGNORE_IP}"
 
-fail2ban-client status asterisk-freepbx || fail2ban-client status
+fail2ban-client status "${JAIL_NAME}" || fail2ban-client status
 
 cat <<EOF
 
-fail2ban is active for SIP brute-force protection.
+fail2ban is active for SIP brute-force protection (${JAIL_NAME}).
 
 Useful commands:
-  fail2ban-client status asterisk-freepbx
-  fail2ban-client set asterisk-freepbx unbanip <IP>
+  fail2ban-client status ${JAIL_NAME}
+  fail2ban-client set ${JAIL_NAME} unbanip <IP>
   fail2ban-regex ${ASTERISK_LOG_PATH} /etc/fail2ban/filter.d/asterisk.conf
 
 Add trusted subnets to ${ENV_FILE}:

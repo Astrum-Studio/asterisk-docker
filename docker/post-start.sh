@@ -6,6 +6,11 @@ export FREEPBX_DB_NAME="${FREEPBX_DB_NAME:-asterisk}"
 export FREEPBX_DB_USER="${FREEPBX_DB_USER:-freepbx}"
 export FREEPBX_DB_PASS="${FREEPBX_DB_PASS:-freepbx}"
 export FREEPBX_DB_PORT="${FREEPBX_DB_PORT:-3307}"
+export SIP_PORT="${SIP_PORT:-5060}"
+export SIPS_PORT="${SIPS_PORT:-5061}"
+export SIP_LEGACY_PORT="${SIP_LEGACY_PORT:-5160}"
+export RTP_START="${RTP_START:-10000}"
+export RTP_FINISH="${RTP_FINISH:-20000}"
 export ASTERISK_AMI_ENABLED="${ASTERISK_AMI_ENABLED:-1}"
 export ASTERISK_AMI_BINDADDR="${ASTERISK_AMI_BINDADDR:-127.0.0.1}"
 export ASTERISK_AMI_PORT="${ASTERISK_AMI_PORT:-5038}"
@@ -14,6 +19,9 @@ export ASTERISK_AMI_PASSWORD="${ASTERISK_AMI_PASSWORD:-admin}"
 export ASTERISK_AMI_PERMIT="${ASTERISK_AMI_PERMIT:-127.0.0.0/255.0.0.0}"
 export ASTERISK_AMI_PERMIT_HOST_IPS="${ASTERISK_AMI_PERMIT_HOST_IPS:-1}"
 export ASTERISK_AMI_PERMIT_DOCKER="${ASTERISK_AMI_PERMIT_DOCKER:-1}"
+export ASTERISK_HTTP_PORT="${ASTERISK_HTTP_PORT:-8088}"
+export ASTERISK_HTTPS_PORT="${ASTERISK_HTTPS_PORT:-8089}"
+export ASTERISK_IAX_PORT="${ASTERISK_IAX_PORT:-4569}"
 export LD_LIBRARY_PATH="/usr/lib/asterisk:${LD_LIBRARY_PATH:-}"
 
 # shellcheck source=ensure-ami.sh
@@ -67,9 +75,17 @@ else
   log "ODBC DSN setup skipped (driver missing)"
 fi
 
+log "Synchronizing network ports (SIP, RTP, AMI, HTTP, IAX)..."
+/usr/local/bin/freepbx-sync-runtime ports || true
+
 log "Reloading FreePBX after Asterisk is ready..."
 /usr/local/bin/freepbx-sync-runtime restore-core || true
 fwconsole reload || true
+
+log "Applying runtime module reloads (pjsip, rtp, http)..."
+/usr/sbin/asterisk -rx "module reload res_pjsip.so" >/dev/null 2>&1 || true
+/usr/sbin/asterisk -rx "module reload res_rtp_asterisk.so" >/dev/null 2>&1 || true
+/usr/sbin/asterisk -rx "module reload res_http_websocket.so" >/dev/null 2>&1 || true
 
 log "Applying FreePBX runtime sync (astdb, inbound routes)..."
 /usr/local/bin/freepbx-sync-runtime || true

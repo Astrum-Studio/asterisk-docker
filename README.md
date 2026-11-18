@@ -7,6 +7,45 @@ Open-source installer for **FreePBX 17** and **Asterisk 21** on Linux using Dock
 
 `network_mode: host` is used for the PBX container so SIP/RTP work reliably on a VM or bare metal without Docker NAT rewriting media addresses.
 
+## Multi-instance deployment on the same server
+
+To run multiple independent PBX instances concurrently on a single machine without port or container name conflicts:
+
+1. Clone or unpack into separate directories (e.g. `/opt/freepbx-1` and `/opt/freepbx-2`).
+2. Set unique ports and project names in each instance's `.env` (or pass flags to `./install.sh`):
+
+```bash
+# Example instance 2:
+./install.sh --yes \
+  --name freepbx-2 \
+  --port 8081 \
+  --db-port 3308 \
+  --sip-port 5070 \
+  --sips-port 5071 \
+  --sip-legacy-port 5170 \
+  --ami-port 5039 \
+  --ast-http-port 8098 \
+  --ast-https-port 8099 \
+  --rtp-start 15000 \
+  --rtp-finish 19999
+```
+
+| Parameter | Default (Inst 1) | Example (Inst 2) | Purpose |
+|---|---|---|---|
+| `COMPOSE_PROJECT_NAME` (`--name`) | `freepbx` | `freepbx-2` | Container names (`<NAME>` & `<NAME>-db`) |
+| `HTTP_PORT` (`--port`) | `8080` | `8081` | FreePBX Web UI |
+| `FREEPBX_DB_PORT` (`--db-port`) | `3307` | `3308` | MariaDB published port |
+| `SIP_PORT` (`--sip-port`) | `5060` | `5070` | PJSIP UDP & TCP signaling |
+| `SIPS_PORT` (`--sips-port`) | `5061` | `5071` | PJSIP TLS signaling |
+| `SIP_LEGACY_PORT` (`--sip-legacy-port`) | `5160` | `5170` | chan_sip UDP (if enabled) |
+| `ASTERISK_AMI_PORT` (`--ami-port`) | `5038` | `5039` | Asterisk AMI TCP |
+| `ASTERISK_HTTP_PORT` (`--ast-http-port`) | `8088` | `8098` | Asterisk mini-HTTP / WebSockets |
+| `ASTERISK_HTTPS_PORT` (`--ast-https-port`) | `8089` | `8099` | Asterisk mini-HTTPS / WSS |
+| `RTP_START` – `RTP_FINISH` | `10000-14999` | `15000-19999` | **Non-overlapping** RTP audio media range |
+
+> [!IMPORTANT]
+> The PBX container runs with `network_mode: host`. FreePBX BMO (`kvstore_Sipsettings`, `freepbx_settings`, `sipsettings`) and Asterisk config files are automatically synchronized on startup from `.env`. Always ensure `RTP_START`–`RTP_FINISH` ranges never overlap between instances!
+
 ## Requirements
 
 - Linux with Docker Engine, Docker Compose v2, and OpenSSL

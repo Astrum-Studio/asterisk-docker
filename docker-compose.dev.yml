@@ -1,13 +1,14 @@
-# Development: local FreePBX image build (20–40 min first time).
+# Local development: builds the Asterisk/FreePBX image locally.
 # Usage:
 #   docker compose -f docker-compose.dev.yml up -d --build
 #
-# Production (prebuilt GHCR): docker compose pull && docker compose up -d
+# MariaDB is published on FREEPBX_DB_PORT (default 3307).
+# The freepbx container uses host networking and reaches MariaDB at 127.0.0.1:FREEPBX_DB_PORT.
 
 services:
   db:
     image: mariadb:10.11
-    container_name: freepbx-db
+    container_name: ${COMPOSE_PROJECT_NAME:-freepbx}-db
     restart: unless-stopped
     env_file:
       - path: .env
@@ -19,7 +20,7 @@ services:
       MYSQL_PASSWORD: "${FREEPBX_DB_PASS:-freepbx}"
       FREEPBX_CDR_DB_NAME: "${FREEPBX_CDR_DB_NAME:-asteriskcdrdb}"
     ports:
-      # Default 0.0.0.0 so same-host Connector can use host.docker.internal (firewall 3307).
+      # Default 0.0.0.0 so same-host Connector can use host.docker.internal (firewall FREEPBX_DB_PORT).
       - "${FREEPBX_DB_BIND:-0.0.0.0}:${FREEPBX_DB_PORT:-3307}:3306"
     volumes:
       - ./mysql:/var/lib/mysql
@@ -39,11 +40,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        ASTERISK_VERSION: "21"
-        FREEPBX_TARBALL_URL: "http://mirror.freepbx.org/modules/packages/freepbx/freepbx-17.0-latest-EDGE.tgz"
     image: freepbx-local:17
-    container_name: freepbx
+    container_name: ${COMPOSE_PROJECT_NAME:-freepbx}
     restart: unless-stopped
     env_file:
       - path: .env
@@ -51,12 +49,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-
-    # Host networking is the most reliable mode for SIP/RTP in a VM because it
-    # avoids Docker NAT rewriting media addresses and ports.
     network_mode: "host"
-
     environment:
+      COMPOSE_PROJECT_NAME: "${COMPOSE_PROJECT_NAME:-freepbx}"
       TZ: "${TZ:-Europe/Moscow}"
       HTTP_PORT: "${HTTP_PORT:-8080}"
       FREEPBX_DB_HOST: "127.0.0.1"
@@ -67,9 +62,20 @@ services:
       FREEPBX_DB_PORT: "${FREEPBX_DB_PORT:-3307}"
       SIP_PORT: "${SIP_PORT:-5060}"
       SIPS_PORT: "${SIPS_PORT:-5061}"
+      SIP_LEGACY_PORT: "${SIP_LEGACY_PORT:-5160}"
       RTP_START: "${RTP_START:-10000}"
       RTP_FINISH: "${RTP_FINISH:-20000}"
-
+      ASTERISK_AMI_ENABLED: "${ASTERISK_AMI_ENABLED:-1}"
+      ASTERISK_AMI_BINDADDR: "${ASTERISK_AMI_BINDADDR:-0.0.0.0}"
+      ASTERISK_AMI_PORT: "${ASTERISK_AMI_PORT:-5038}"
+      ASTERISK_AMI_USER: "${ASTERISK_AMI_USER:-admin}"
+      ASTERISK_AMI_PASSWORD: "${ASTERISK_AMI_PASSWORD:-change-this-ami-password}"
+      ASTERISK_AMI_PERMIT: "${ASTERISK_AMI_PERMIT:-127.0.0.0/255.0.0.0}"
+      ASTERISK_AMI_PERMIT_HOST_IPS: "${ASTERISK_AMI_PERMIT_HOST_IPS:-1}"
+      ASTERISK_AMI_PERMIT_DOCKER: "${ASTERISK_AMI_PERMIT_DOCKER:-1}"
+      ASTERISK_HTTP_PORT: "${ASTERISK_HTTP_PORT:-8088}"
+      ASTERISK_HTTPS_PORT: "${ASTERISK_HTTPS_PORT:-8089}"
+      ASTERISK_IAX_PORT: "${ASTERISK_IAX_PORT:-4569}"
     volumes:
       - ./data:/data
       - ./www:/var/www/html
@@ -79,5 +85,4 @@ services:
       - ./voicemail:/var/spool/asterisk/voicemail
       - ./certs:/certs
       - ./logs:/var/log
-
     shm_size: "256m"

@@ -252,6 +252,19 @@ EOF_MANAGER_GENERAL_CUSTOM
   chmod 640 /etc/asterisk/manager_general_custom.conf
   chown asterisk:asterisk /etc/asterisk/manager_general_custom.conf 2>/dev/null || true
 
+  # Keep FreePBX database setting ASTMANAGERPORT in sync with ASTERISK_AMI_PORT
+  if command -v mariadb >/dev/null 2>&1; then
+    load_freepbx_db_config
+    mariadb \
+      -h "${FREEPBX_DB_HOST:-127.0.0.1}" \
+      -P "${FREEPBX_DB_PORT:-3307}" \
+      -u "${FREEPBX_DB_USER:-freepbx}" \
+      -p"${FREEPBX_DB_PASS:-freepbx}" \
+      "${FREEPBX_DB_NAME:-asterisk}" \
+      -e "UPDATE freepbx_settings SET value='${ASTERISK_AMI_PORT}' WHERE keyword='ASTMANAGERPORT';" \
+      2>/dev/null || true
+  fi
+
   # FreePBX owns manager.conf after install; only seed it on first boot.
   if [ ! -f /data/.freepbx-installed ]; then
     touch \

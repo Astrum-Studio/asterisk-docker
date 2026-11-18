@@ -1,5 +1,5 @@
 # Managed by docker/fail2ban/install.sh — do not edit on the host directly.
-[asterisk-freepbx]
+[__JAIL_NAME__]
 enabled = true
 filter = asterisk
 port = __SIP_PORT__,__SIPS_PORT__

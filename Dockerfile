@@ -114,6 +114,8 @@ RUN set -eux; \
     sed -i 's/memory_limit = .*/memory_limit = 256M/' /etc/php/8.2/fpm/php.ini; \
     sed -i 's/upload_max_filesize = .*/upload_max_filesize = 64M/' /etc/php/8.2/fpm/php.ini; \
     sed -i 's/post_max_size = .*/post_max_size = 64M/' /etc/php/8.2/fpm/php.ini; \
+    sed -i 's/^;\?max_input_vars = .*/max_input_vars = 5000/' /etc/php/8.2/fpm/php.ini; \
+    grep -q '^max_input_vars = ' /etc/php/8.2/fpm/php.ini || echo 'max_input_vars = 5000' >> /etc/php/8.2/fpm/php.ini; \
     sed -i 's/^user = .*/user = asterisk/' /etc/php/8.2/fpm/pool.d/www.conf; \
     sed -i 's/^group = .*/group = asterisk/' /etc/php/8.2/fpm/pool.d/www.conf; \
     sed -i 's/^listen.owner = .*/listen.owner = asterisk/' /etc/php/8.2/fpm/pool.d/www.conf; \

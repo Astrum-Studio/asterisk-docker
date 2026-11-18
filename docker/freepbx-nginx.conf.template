@@ -10,6 +10,25 @@ server {
 
     client_max_body_size 64M;
 
+    # FreePBX ships these rules in .htaccess. nginx does not read that file.
+    rewrite ^/admin/api/([^/]*)/([^/]*)/?(.*)?$ /admin/api/api.php?module=$1&command=$2&route=$3 last;
+
+    location ~ (?:^|/)\.(?!well-known) {
+        deny all;
+    }
+
+    location ~* \.ini$ {
+        deny all;
+    }
+
+    location ~* /(libraries|helpers|i18n|node)(/|$) {
+        deny all;
+    }
+
+    location ~* /views/.+\.php$ {
+        deny all;
+    }
+
     location / {
         try_files $uri $uri/ /index.php?$args;
     }
@@ -21,6 +40,7 @@ server {
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         fastcgi_param HTTP_HOST $http_host;
         fastcgi_param SERVER_NAME $host;
+        fastcgi_param HTACCESS on;
         fastcgi_pass unix:/run/php/php8.2-fpm.sock;
     }
 

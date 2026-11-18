@@ -210,7 +210,7 @@ On every container start, `freepbx-post-start` now:
 1. Creates `/var/lib/asterisk/{bin,agi-bin}` symlinks expected by FreePBX
 2. Runs `fwconsole reload`
 3. Runs `fwconsole util resetastdb` to rebuild `AMPUSER`/`DEVICE` from MariaDB
-4. Normalizes inbound-route `cidnum` NULL values (PHP 8.2 compatibility)
+4. Normalizes inbound-route `cidnum` and `extension` NULL values (PHP 8.2) without editing signed `Core.class.php`
 
 Manual repair on a running container:
 

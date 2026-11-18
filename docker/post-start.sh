@@ -68,14 +68,18 @@ else
 fi
 
 log "Reloading FreePBX after Asterisk is ready..."
+/usr/local/bin/freepbx-sync-runtime restore-core || true
 fwconsole reload || true
 
-log "Applying FreePBX runtime sync (astdb, inbound routes, PHP patches)..."
+log "Applying FreePBX runtime sync (astdb, inbound routes)..."
 /usr/local/bin/freepbx-sync-runtime || true
 
 log "Ensuring call recording on inbound/outbound routes..."
 /usr/local/bin/freepbx-ensure-call-recording || true
 /usr/sbin/fwconsole reload >/dev/null 2>&1 || true
 /usr/sbin/asterisk -rx "dialplan reload" >/dev/null 2>&1 || true
+
+log "Clearing stock FreePBX dashboard notices..."
+/usr/local/bin/freepbx-sync-runtime notices || true
 
 log "Post-start tasks completed."

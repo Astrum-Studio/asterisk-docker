@@ -65,6 +65,8 @@ services:
       FREEPBX_DB_USER: "${FREEPBX_DB_USER:-freepbx}"
       FREEPBX_DB_PASS: "${FREEPBX_DB_PASS:-freepbx}"
       FREEPBX_DB_PORT: "${FREEPBX_DB_PORT:-3307}"
+      SIP_PORT: "${SIP_PORT:-5060}"
+      SIPS_PORT: "${SIPS_PORT:-5061}"
       RTP_START: "${RTP_START:-10000}"
       RTP_FINISH: "${RTP_FINISH:-20000}"
 
